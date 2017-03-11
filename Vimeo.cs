@@ -261,10 +261,22 @@ public class Vimeo {
     }
 
 	/// <summary>
-	/// Get a list of all videos.
+	/// Get metadata for a single video.
 	/// </summary>
-	/// <returns>List of videos.</returns>
-	public List<VimeoVideo> Videos() {
+	/// <param name="videoID">The Vimeo ID of the video.</param>
+	/// <returns>Video metadata.</returns>
+	public VimeoVideo GetVideo(string videoID) {
+		var res = this.Request("/videos/" + videoID, "GET");
+		var video = JsonConvert.DeserializeObject<VimeoVideo>(res.JSON);
+
+		return video;
+	}
+
+	/// <summary>
+	/// Get a list of all videos' metadata.
+	/// </summary>
+	/// <returns>List of videos' metadata.</returns>
+	public List<VimeoVideo> GetVideos() {
 		var res = this.Request("/me/videos?direction=desc&per_page=100&sort=date", "GET");
 		var page = JsonConvert.DeserializeObject<VimeoPage>(res.JSON);
 		var list = page.data;
