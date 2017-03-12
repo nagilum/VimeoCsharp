@@ -266,7 +266,7 @@ public class Vimeo {
 	/// <param name="videoID">The Vimeo ID of the video.</param>
 	/// <returns>Video metadata.</returns>
 	public VimeoVideo GetVideo(string videoID) {
-		var res = this.Request("/videos/" + videoID, "GET");
+		var res = this.Request("/me/videos/" + videoID, "GET");
 		var video = JsonConvert.DeserializeObject<VimeoVideo>(res.JSON);
 
 		return video;
@@ -275,9 +275,10 @@ public class Vimeo {
 	/// <summary>
 	/// Get a list of all videos' metadata.
 	/// </summary>
+	/// <param name="query">String to filter videos by.</param>
 	/// <returns>List of videos' metadata.</returns>
-	public List<VimeoVideo> GetVideos() {
-		var res = this.Request("/me/videos?direction=desc&per_page=100&sort=date", "GET");
+	public List<VimeoVideo> GetVideos(string query = null) {
+		var res = this.Request("/me/videos?direction=desc&per_page=100&sort=date" + (query != null ? "&query=" + query : null), "GET");
 		var page = JsonConvert.DeserializeObject<VimeoPage>(res.JSON);
 		var list = page.data;
 
