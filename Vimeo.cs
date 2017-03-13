@@ -37,7 +37,7 @@ public class Vimeo {
 	/// <param name="bytes">Bytes to transfer.</param>
 	/// <param name="additionalHeaders">Additional headers to use.</param>
 	/// <returns>Response object.</returns>
-	private VimeoResponse Request(string uri, string method = "POST", object payload = null, byte[] bytes = null, NameValueCollection additionalHeaders = null) {
+	public VimeoResponse Request(string uri, string method = "POST", object payload = null, byte[] bytes = null, NameValueCollection additionalHeaders = null) {
 		const string apiBaseUri = "https://api.vimeo.com";
 
 		if (!uri.StartsWith("https")) {
