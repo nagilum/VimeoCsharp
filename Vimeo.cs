@@ -38,8 +38,10 @@ public class Vimeo {
 	/// <param name="additionalHeaders">Additional headers to use.</param>
 	/// <returns>Response object.</returns>
 	private VimeoResponse Request(string uri, string method = "POST", object payload = null, byte[] bytes = null, NameValueCollection additionalHeaders = null) {
+		const string apiBaseUri = "https://api.vimeo.com";
+
 		if (!uri.StartsWith("https")) {
-			uri = "https://api.vimeo.com" + uri;
+			uri = apiBaseUri + uri;
 		}
 
 		var req = WebRequest.Create(uri) as HttpWebRequest;
@@ -53,7 +55,10 @@ public class Vimeo {
 		req.Accept = "application/vnd.vimeo.*+json; version=3.2";
 		req.Method = method;
 		req.UserAgent = ".NET Vimeo API Client";
-		req.Headers.Add("Authorization", "Bearer " + this.AccessToken);
+
+		if (uri.StartsWith(apiBaseUri)) {
+			req.Headers.Add("Authorization", "Bearer " + this.AccessToken);
+		}
 
 		if (additionalHeaders != null) {
 			foreach (var header in additionalHeaders) {
@@ -156,19 +161,27 @@ public class Vimeo {
 	/// <param name="filePath">Path to the file.</param>
 	/// <param name="properties">Properties to patch the file with after upload.</param>
 	/// <returns>Video info.</returns>
-	public VimeoVideo UploadFile(string filePath, VimeoVideoProperties properties = null) {
+	public VimeoUploadResponse UploadFile(string filePath, VimeoVideoProperties properties = null) {
+		var ur = new VimeoUploadResponse {
+			Exceptions = new List<Exception>()
+		};
+
         // Generate a ticket.
         var res = this.Request("/me/videos", "POST", new { type = "streaming" });
 
         if (res.Code != 201) {
-            throw res.Exception;
+	        ur.Exceptions.Add(res.Exception);
+	        return ur;
         }
 
         var ticket = JsonConvert.DeserializeObject<VimeoUploadTicket>(res.JSON);
 
         if (ticket == null) {
-            throw new Exception("Unable to deserialize JSON response from Vimeo.");
+            ur.Exceptions.Add(new Exception("Unable to deserialize ticket JSON response from Vimeo."));
+	        return ur;
         }
+
+		ur.Ticket = ticket;
 
         // Cycle and upload chunks.
         var fileInfo = new FileInfo(filePath);
@@ -189,19 +202,18 @@ public class Vimeo {
 		        buffer.Add(bytes[i]);
 	        }
 
-	        try {
-                this.Request(
-                    ticket.upload_link_secure,
-                    "PUT",
-                    null,
-                    buffer.ToArray(),
-                    new WebHeaderCollection {
-                        { "Content-Range", string.Format("bytes {0}-{1}/{1}", currentPos, totalLength) }
-                    });
-            }
-            catch {
-                // ignore
-            }
+	        res = this.Request(
+		        ticket.upload_link_secure,
+		        "PUT",
+		        null,
+		        buffer.ToArray(),
+		        new WebHeaderCollection {
+			        {"Content-Range", string.Format("bytes {0}-{1}/{1}", currentPos, totalLength)}
+		        });
+
+	        if (res.Exception != null) {
+		        ur.Exceptions.Add(res.Exception);
+	        }
 
             // Check progress.
             res = Request(
@@ -214,8 +226,13 @@ public class Vimeo {
                 });
 
 	        if (res.Headers == null) {
-		        throw new Exception("API returned invalid response.");
+		        ur.Exceptions.Add(new Exception("API returned invalid response for PUT (check progress)."));
+				return ur;
 	        }
+
+			if (res.Exception != null) {
+				ur.Exceptions.Add(res.Exception);
+			}
 
 	        var range = res.Headers["Range"];
 	        var rangeSepIndex = range.IndexOf("-", StringComparison.InvariantCultureIgnoreCase);
@@ -240,25 +257,33 @@ public class Vimeo {
             ticket.complete_uri,
             "DELETE");
 
+		if (res.Exception != null) {
+			ur.Exceptions.Add(res.Exception);
+		}
+
 		var videoID = res.Headers["Location"].Substring(res.Headers["Location"].LastIndexOf("/", StringComparison.InvariantCultureIgnoreCase) + 1);
 
-        var video = new VimeoVideo {
-			uri = res.Headers["Location"],
-			link = "https://vimeo.com/" + videoID
-        };
+		if (properties != null) {
+			res = this.Request(
+				res.Headers["Location"],
+				"PATCH",
+				properties);
 
-        if (properties == null) {
-            return video;
-        }
+			if (res.Exception != null) {
+				ur.Exceptions.Add(res.Exception);
+			}
+		}
 
-        // Update name and password
-        this.Request(
-			res.Headers["Location"],
-            "PATCH",
-            properties);
+		res = this.Request("/me/videos/" + videoID, "GET");
 
-        return video;
-    }
+		if (res.Exception != null) {
+			ur.Exceptions.Add(res.Exception);
+		}
+
+		ur.Video = JsonConvert.DeserializeObject<VimeoVideo>(res.JSON);
+
+		return ur;
+	}
 
 	/// <summary>
 	/// Get metadata for a single video.
@@ -509,9 +534,9 @@ public class Vimeo {
 	}
 
 	#endregion
-	#region Internal Helper Classes
+	#region Helper Classes
 
-	private class VimeoPage {
+	public class VimeoPage {
 		public int total { get; set; }
 		public int page { get; set; }
 		public int per_page { get; set; }
@@ -519,30 +544,33 @@ public class Vimeo {
 		public List<VimeoVideo> data { get; set; }
 	}
 
-	private class VimeoPaging {
+	public class VimeoPaging {
 		public string next { get; set; }
 		public string previous { get; set; }
 		public string first { get; set; }
 		public string last { get; set; }
 	}
 
-	private class VimeoResponse {
+	public class VimeoResponse {
 		public int Code { get; set; }
 		public Exception Exception { get; set; }
 		public string JSON { get; set; }
 		public WebHeaderCollection Headers { get; set; }
 	}
 
-	private class VimeoUploadTicket {
+	public class VimeoUploadResponse {
+		public List<Exception> Exceptions { get; set; }
+		public VimeoUploadTicket Ticket { get; set; }
+		public VimeoVideo Video { get; set; }
+	}
+
+	public class VimeoUploadTicket {
 		public string uri { get; set; }
 		public string ticket_id { get; set; }
 		public string complete_uri { get; set; }
 		public string upload_link_secure { get; set; }
 		public object user { get; set; }
 	}
-
-	#endregion
-	#region External Helper Classes
 
 	public class VimeoVideo {
 		public string uri { get; set; }
