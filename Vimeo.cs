@@ -286,6 +286,17 @@ public class Vimeo {
 	}
 
 	/// <summary>
+	/// Generate a Vimeo upload ticket.
+	/// </summary>
+	/// <returns>Upload ticket.</returns>
+	public VimeoUploadTicket GetUploadTicket() {
+		var res = this.Request("/me/videos", "POST", new { type = "streaming" });
+		var ticket = JsonConvert.DeserializeObject<VimeoUploadTicket>(res.JSON);
+
+		return ticket;
+	}
+
+	/// <summary>
 	/// Get metadata for a single video.
 	/// </summary>
 	/// <param name="videoID">The Vimeo ID of the video.</param>
